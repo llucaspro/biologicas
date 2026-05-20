@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
 // ── FIREBASE ──────────────────────────────────────────────────────────────────
 const firebaseApp = initializeApp({
@@ -12,13 +13,10 @@ const firebaseApp = initializeApp({
   appId: "1:723961069745:web:7a247bec2a3352b564a290",
 });
 const db = getFirestore(firebaseApp);
+const auth = getAuth(firebaseApp);
 const schoolsCol = collection(db, "schools");
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const ADMIN_EMAIL    = "bioloucos126@gmail.com";
-const ADMIN_HASH     = "398707c6a99a1b1409313972df5c2481d92b1e3408de28cabdaaaf45d656d21b";
-const SESSION_KEY    = "bio_admin_session";
-const SESSION_TTL    = 24 * 60 * 60 * 1000;
 const PTS_PER_LITER  = 101;
 const CITIES_COUNT   = 3;
 
@@ -31,22 +29,6 @@ const DEFAULT_SCHOOLS = [
   { id: 6, name: "EM Riachuelo Eco",           liters: 216, status: "Ativo" },
   { id: 7, name: "EMEF Santos Dumont",         liters: 155, status: "Ativo" },
 ];
-
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-const sha256 = async (str) => {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
-};
-
-const getSession = () => {
-  try {
-    const s = JSON.parse(localStorage.getItem(SESSION_KEY));
-    if (!s || Date.now() > s.expiresAt) { localStorage.removeItem(SESSION_KEY); return null; }
-    return s;
-  } catch { return null; }
-};
-const setSession  = (e) => localStorage.setItem(SESSION_KEY, JSON.stringify({ email:e, expiresAt: Date.now()+SESSION_TTL }));
-const clearSession = () => localStorage.removeItem(SESSION_KEY);
 
 // ── LOGO ──────────────────────────────────────────────────────────────────────
 const Logo = ({ size = 40, glow = false }) => (
@@ -674,10 +656,11 @@ const AdminLogin = ({ onLogin }) => {
     if(!email.trim()||!pass){setError("Preencha todos os campos.");return;}
     setLoading(true);
     try {
-      const hash = await sha256(pass);
-      if(email.toLowerCase().trim()===ADMIN_EMAIL && hash===ADMIN_HASH){ setSession(email); onLogin(); }
-      else setError("E-mail ou senha incorretos.");
-    } catch { setError("Erro ao autenticar."); }
+      await signInWithEmailAndPassword(auth, email.trim(), pass);
+      onLogin();
+    } catch (e) {
+      setError("E-mail ou senha incorretos.");
+    }
     setLoading(false);
   };
 
@@ -707,7 +690,7 @@ const AdminLogin = ({ onLogin }) => {
             {loading?"Verificando...":"Entrar →"}
           </button>
         </div>
-        <p style={{textAlign:"center",marginTop:20,color:"var(--dim)",fontSize:11,fontFamily:"var(--fm)"}}>🔒 Senha criptografada SHA-256</p>
+        <p style={{textAlign:"center",marginTop:20,color:"var(--dim)",fontSize:11,fontFamily:"var(--fm)"}}>🔒 Autenticação via Firebase</p>
       </div>
     </div>
   );
@@ -784,7 +767,7 @@ const AdminDashboard = ({ onLogout, schools, setSchools }) => {
       <div style={{flex:1}} />
       <div style={{paddingLeft:2}}>
         <p style={{color:"var(--dim)",fontSize:10,marginBottom:8,fontFamily:"var(--fm)"}}>Sessão ativa · 24h</p>
-        <button className="btn btn-o btn-sm" style={{width:"100%"}} onClick={()=>{clearSession();onLogout();}}>Sair</button>
+        <button className="btn btn-o btn-sm" style={{width:"100%"}} onClick={()=>{signOut(auth);onLogout();}}>Sair</button>
       </div>
     </div>
   );
@@ -1083,10 +1066,16 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  useEffect(() => { if(getSession()) setIsAdmin(true); }, []);
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setIsAdmin(!!user);
+      if (!user && page === "admin-dash") setPage("home");
+    });
+    return () => unsub();
+  }, []);
 
   const nav = (p) => {
-    if(p==="admin") setPage(isAdmin?"admin-dash":"admin-login");
+    if(p==="admin") setPage(auth.currentUser?"admin-dash":"admin-login");
     else setPage(p);
     window.scrollTo({top:0,behavior:"smooth"});
   };
