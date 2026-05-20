@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+
+// ── FIREBASE ──────────────────────────────────────────────────────────────────
+const firebaseApp = initializeApp({
+  apiKey: "AIzaSyCecT_wqZSWUCtfdnZgzACBaicggzagA1w",
+  authDomain: "biologicas-55797.firebaseapp.com",
+  projectId: "biologicas-55797",
+  storageBucket: "biologicas-55797.firebasestorage.app",
+  messagingSenderId: "723961069745",
+  appId: "1:723961069745:web:7a247bec2a3352b564a290",
+});
+const db = getFirestore(firebaseApp);
+const schoolsCol = collection(db, "schools");
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 const ADMIN_EMAIL    = "bioloucos126@gmail.com";
 const ADMIN_HASH     = "398707c6a99a1b1409313972df5c2481d92b1e3408de28cabdaaaf45d656d21b";
 const SESSION_KEY    = "bio_admin_session";
-const SCHOOLS_KEY    = "bio_schools_v2";
 const SESSION_TTL    = 24 * 60 * 60 * 1000;
 const PTS_PER_LITER  = 101;
 const CITIES_COUNT   = 3;
@@ -24,12 +37,6 @@ const sha256 = async (str) => {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
 };
-
-const loadSchools = () => {
-  try { const s = JSON.parse(localStorage.getItem(SCHOOLS_KEY)); return Array.isArray(s) ? s : null; }
-  catch { return null; }
-};
-const saveSchools = (list) => localStorage.setItem(SCHOOLS_KEY, JSON.stringify(list));
 
 const getSession = () => {
   try {
@@ -727,32 +734,31 @@ const AdminDashboard = ({ onLogout, schools, setSchools }) => {
 
   const notify = (msg) => setToast(msg);
 
-  const addSchool = () => {
+  const addSchool = async () => {
     const name = newName.trim();
     const liters = parseFloat(newLiters);
     if(!name){ notify("⚠ Digite o nome da escola"); return; }
     if(isNaN(liters)||liters<0){ notify("⚠ Litros inválidos"); return; }
-    const updated = [...schools, {id:Date.now(), name, liters, status:"Ativo"}];
-    setSchools(updated); saveSchools(updated);
+    const id = Date.now();
+    await setDoc(doc(db, "schools", String(id)), {id, name, liters, status:"Ativo"});
     setNewName(""); setNewLiters("");
     notify(`Escola "${name}" adicionada!`);
   };
 
-  const removeSchool = (id) => {
-    const updated = schools.filter(s=>s.id!==id);
-    setSchools(updated); saveSchools(updated);
+  const removeSchool = async (id) => {
+    await deleteDoc(doc(db, "schools", String(id)));
     notify("Escola removida.");
   };
 
   const startEdit = (s) => { setEditId(s.id); setEditLiters(String(s.liters)); setEditName(s.name); };
   const cancelEdit = () => { setEditId(null); setEditLiters(""); setEditName(""); };
 
-  const saveEdit = (id) => {
+  const saveEdit = async (id) => {
     const liters = parseFloat(editLiters);
     const name   = editName.trim();
     if(!name||isNaN(liters)||liters<0){ notify("⚠ Valores inválidos"); return; }
-    const updated = schools.map(s => s.id===id ? {...s, name, liters} : s);
-    setSchools(updated); saveSchools(updated);
+    const school = schools.find(s => s.id === id);
+    await setDoc(doc(db, "schools", String(id)), {...school, name, liters});
     cancelEdit();
     notify("Dados salvos com sucesso!");
   };
@@ -1062,8 +1068,20 @@ export default function App() {
   const [page,     setPage]     = useState("home");
   const [isAdmin,  setIsAdmin]  = useState(false);
 
-  // Single source of truth for schools — persisted in localStorage
-  const [schools, setSchools] = useState(() => loadSchools() ?? DEFAULT_SCHOOLS);
+  const [schools, setSchools] = useState([]);
+  const [dbReady, setDbReady] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(schoolsCol, (snap) => {
+      if (snap.empty) {
+        DEFAULT_SCHOOLS.forEach(s => setDoc(doc(db, "schools", String(s.id)), s));
+      } else {
+        setSchools(snap.docs.map(d => d.data()));
+      }
+      setDbReady(true);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => { if(getSession()) setIsAdmin(true); }, []);
 
