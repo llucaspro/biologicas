@@ -1056,11 +1056,7 @@ export default function App() {
 
   useEffect(() => {
     const unsub = onSnapshot(schoolsCol, (snap) => {
-      if (snap.empty) {
-        DEFAULT_SCHOOLS.forEach(s => setDoc(doc(db, "schools", String(s.id)), s));
-      } else {
-        setSchools(snap.docs.map(d => d.data()));
-      }
+      setSchools(snap.docs.map(d => d.data()));
       setDbReady(true);
     });
     return () => unsub();
