@@ -373,7 +373,6 @@ const HomePage = ({ nav, schools }) => {
       <section ref={sRef} style={{padding:"52px 18px",maxWidth:960,margin:"0 auto"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:14}}>
           {[
-            {v:cL, s:" L",       label:"Óleo coletado",  icon:"🫙", c:"var(--g)"},
             {v:cS, s:" escolas", label:"Participantes",   icon:"🏫", c:"var(--blue)"},
             {v:cC, s:" cidades", label:"Municípios",      icon:"🌍", c:"var(--red)"},
           ].map((s,i)=>(
