@@ -506,7 +506,7 @@ const RankingPage = ({ schools }) => {
               <span className="shimmer">Ranking das Escolas</span>
             </h1>
             <p style={{color:"var(--m)",marginTop:12,fontSize:13}}>
-              Atualizado em tempo real · 1 litro = {PTS_PER_LITER} pontos
+              Atualizado em tempo real
             </p>
           </div>
         </Reveal>
